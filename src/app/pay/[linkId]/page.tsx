@@ -11,6 +11,7 @@ interface LinkData {
   merchant_name: string;
   description: string | null;
   amount_usdc: string;
+  fee_usdc: string | null;
   currency: string;
   stellar_base_address: string;
 }
@@ -219,6 +220,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ linkId: str
       }
       const data: LinkData = await res.json();
       setLinkData(data);
+      // SEP-7 `pay` requests a single fixed destination/amount — it
+      // structurally cannot carry the second (fee) operation prepareTx
+      // builds below. Rather than silently under-collecting relative to
+      // the total shown on this same page, the QR option just isn't
+      // offered when a fee applies; Freighter is still available.
+      const hasFee = Number(data.fee_usdc) > 0;
+      if (hasFee) setShowQr(false);
 
       try {
         sharedMuxedId.current = await reserveSessionWithRetry();
@@ -228,7 +236,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ linkId: str
         setShowQr(false);
         return;
       }
-      await setupQrPayment(sharedMuxedId.current);
+      if (!hasFee) await setupQrPayment(sharedMuxedId.current);
       // Long, silent watch — up to 10 minutes — for the QR/mobile-wallet
       // path, which has no "just submitted" moment to bound the wait
       // against.
@@ -244,8 +252,18 @@ export default function CheckoutPage({ params }: { params: Promise<{ linkId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkId]);
 
-  const amountStr = linkData ? Number(linkData.amount_usdc).toFixed(2) : "";
-  const amountDisplay = linkData ? (linkData.currency === "USDC" ? `$${amountStr}` : `${amountStr} ${linkData.currency}`) : "";
+  function formatCurrency(value: string, currency: string): string {
+    const str = Number(value).toFixed(2);
+    return currency === "USDC" ? `$${str}` : `${str} ${currency}`;
+  }
+
+  const amountDisplay = linkData ? formatCurrency(linkData.amount_usdc, linkData.currency) : "";
+  const feeUsdc = linkData?.fee_usdc ? Number(linkData.fee_usdc) : 0;
+  const feeDisplay = linkData && feeUsdc > 0 ? formatCurrency(linkData.fee_usdc as string, linkData.currency) : "";
+  const totalDisplay =
+    linkData && feeUsdc > 0
+      ? formatCurrency((Number(linkData.amount_usdc) + feeUsdc).toString(), linkData.currency)
+      : "";
 
   return (
     <div className="page-center">
@@ -260,7 +278,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ linkId: str
           <div>
             <div className="merchant-label">{linkData.merchant_name}</div>
             <div className="desc-label">{linkData.description || "Payment"}</div>
-            <div className="amount-display">{amountDisplay}</div>
+            {feeUsdc > 0 ? (
+              <>
+                <div className="amount-display">{totalDisplay}</div>
+                <div className="sub" style={{ marginTop: -8, marginBottom: 16 }}>
+                  {amountDisplay} + {feeDisplay} fee
+                </div>
+              </>
+            ) : (
+              <div className="amount-display">{amountDisplay}</div>
+            )}
 
             {showQr && (
               <>
