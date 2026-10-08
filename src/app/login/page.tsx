@@ -71,6 +71,8 @@ export default function LoginPage() {
           <div className={`status${status ? " error" : ""}`}>{status}</div>
         </form>
         <div className="footer">
+          <Link href="/forgot-password">Forgot your password?</Link>
+          <br />
           New here? <Link href="/signup">Create an account</Link>
         </div>
       </div>
