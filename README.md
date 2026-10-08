@@ -14,7 +14,9 @@ Sibling repos: [konfirm-backend](https://github.com/konfirm-HQ/konfirm-backend) 
 | `/pay/:linkId` | `src/app/pay/[linkId]/page.tsx` | Checkout — Freighter *or* a SEP-7 QR code / tappable link for any Stellar mobile wallet, whichever the payer finishes first |
 | `/activity` | `src/app/activity/page.tsx` | Merchant dashboard — live payment feed, polls every 3s, per-asset totals |
 | `/cashout` | `src/app/cashout/page.tsx` | Fiat off-ramp — real SEP-10/SEP-24 flow against Stellar's reference anchor |
-| `/get-test-usdc` | `src/app/get-test-usdc/page.tsx` | Pulls test USDC from the reference anchor via Freighter, then forwards it to whatever wallet you're actually testing checkout with — not part of the merchant product |
+| `/forgot-password` | `src/app/forgot-password/page.tsx` | Requests a password-reset email. Gives the same reply whether or not the account exists |
+| `/reset-password` | `src/app/reset-password/page.tsx` | Sets a new password from the emailed link. Reached only with a `?token=` |
+| `/get-test-usdc` | `src/app/get-test-usdc/page.tsx` | Pulls test USDC from the reference anchor via Freighter, then forwards it to whatever wallet you're actually testing checkout with — not part of the merchant product. Needs the backend's `ENABLE_TESTNET_FAUCET=true`; off in production |
 
 ### Admin
 
@@ -29,8 +31,20 @@ A separate, admin-only section — a fully distinct identity from merchant auth 
 | `/admin/compliance` | `src/app/admin/compliance/page.tsx` | The address blocklist — block/unblock, with the SEP-7/QR coverage gap stated on the page itself, not just in a README |
 | `/admin/reconciler` | `src/app/admin/reconciler/page.tsx` | Cursor status + a rewind form that mirrors the backend's own backward-only guard client-side, so a forward jump is caught before the request round-trips. A `window.confirm` pointing at `docs/RUNBOOK.md` gates every submit — this is a rare, deliberately manual operation, not a routine control, and the UI doesn't pretend otherwise |
 | `/admin/withdrawals` | `src/app/admin/withdrawals/page.tsx` | Cash-out visibility only — a manual refresh re-polls the anchor for anything not yet finished; there's no admin action here beyond looking, because Konfirm has no authority over the anchor's own transaction state |
+| `/admin/users` | `src/app/admin/users/page.tsx` | Every payer address with payment count and volume across all statuses |
+| `/admin/wallets` | `src/app/admin/wallets/page.tsx` | Every address in the system with its roles (merchant, payer, blocked) |
+| `/admin/pay-links` | `src/app/admin/pay-links/page.tsx` | Payment links across every merchant |
+| `/admin/referrals` | `src/app/admin/referrals/page.tsx` | Referral attributions and reward status |
+| `/admin/fee-revenue` | `src/app/admin/fee-revenue/page.tsx` | Fee revenue totals and daily series from confirmed payments |
+| `/admin/exchange-rate` | `src/app/admin/exchange-rate/page.tsx` | Live XLM and EURC rates, and the rates applied to payments |
+| `/admin/treasury` | `src/app/admin/treasury/page.tsx` | Treasury contract state (read-only) |
+| `/admin/blockchain` | `src/app/admin/blockchain/page.tsx` | Deployed contract addresses and live status |
+| `/admin/facilitator` | `src/app/admin/facilitator/page.tsx` | Facilitator spend against the daily cap, halt status, and resume |
+| `/admin/x402-settlements` | `src/app/admin/x402-settlements/page.tsx` | x402 single-shot settlements |
+| `/admin/bazaar` | `src/app/admin/bazaar/page.tsx` | Review x402 Bazaar submissions: approve or reject |
+| `/admin/notifications` | `src/app/admin/notifications/page.tsx` | Events derived from existing rows: disputes, stuck withdrawals, blocks |
 
-All six pages are guarded by the shared `admin/layout.tsx` — the first nested layout in this app, since this is the first section where the auth-check-on-mount + nav pattern is genuinely shared across more than one page instead of duplicated inline like everywhere else today. The Overview chart is a small hand-rolled SVG area chart, not a charting library — this app has no charting dependency, and one 7-point series doesn't need one.
+Every admin page is guarded by the shared `admin/layout.tsx` — the first nested layout in this app, since this is the first section where the auth-check-on-mount + nav pattern is genuinely shared across more than one page instead of duplicated inline like everywhere else today. The Overview chart is a small hand-rolled SVG area chart, not a charting library — this app has no charting dependency, and one 7-point series doesn't need one.
 
 ## Tech stack
 
