@@ -44,6 +44,36 @@ export default function AdminMerchantsPage() {
     })();
   }, []);
 
+  async function sendPasswordReset(merchant: Merchant) {
+    if (!window.confirm(`Email a password-reset link to ${merchant.email}?`)) return;
+    const reason = window.prompt("Why? Required, shown in the activity log:", "");
+    if (!reason || reason.trim().length < 3) {
+      setError("A reason of at least 3 characters is needed to send a reset.");
+      return;
+    }
+    setPendingId(merchant.id);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/admin/merchants/${merchant.id}/password-reset`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Could not send the reset email.");
+      }
+      setError("");
+      window.alert(`Reset link sent to ${merchant.email}.`);
+    } catch (err) {
+      console.error("[konfirm admin] password reset failed", err);
+      setError(err instanceof Error ? err.message : "Could not send the reset email.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   async function toggleStatus(merchant: Merchant) {
     const nextStatus = merchant.status === "suspended" ? "active" : "suspended";
     const verb = nextStatus === "suspended" ? "suspend" : "reactivate";
@@ -161,6 +191,14 @@ export default function AdminMerchantsPage() {
                     <td>
                       <button type="button" disabled={pendingId === m.id} onClick={() => toggleStatus(m)}>
                         {m.status === "suspended" ? "Reactivate" : "Suspend"}
+                      </button>{" "}
+                      <button
+                        type="button"
+                        disabled={pendingId === m.id || m.status !== "active"}
+                        onClick={() => sendPasswordReset(m)}
+                        title={m.status !== "active" ? "Reactivate the account first" : undefined}
+                      >
+                        Send reset
                       </button>
                     </td>
                   </tr>

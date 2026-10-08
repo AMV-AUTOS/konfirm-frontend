@@ -11,6 +11,7 @@ interface Payment {
   asset_code: string;
   payer_address: string;
   status: PaymentStatus;
+  flag_reason: string | null;
   tx_hash: string;
   created_at: string;
   merchant_name: string;
@@ -18,6 +19,18 @@ interface Payment {
 }
 
 const STATUS_OPTIONS: PaymentStatus[] = ["paid", "held", "disputed"];
+
+// Why the reconciler held a payment, in plain words for the reviewer.
+const FLAG_LABEL: Record<string, string> = {
+  no_session: "No payment link matched",
+  amount_mismatch: "Amount differs from the link",
+  asset_mismatch: "Different asset from the link",
+  issuer_mismatch: "Asset issuer doesn't match (possible fake token)",
+  link_inactive: "Link was deactivated",
+  no_fixed_amount: "Open-amount link (not checkable)",
+  blocked_address: "Payer is blocked",
+  fee_leg_missing: "Platform fee not included",
+};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -129,6 +142,11 @@ export default function AdminPaymentsPage() {
                     <td className="mono">{shortAddress(p.payer_address)}</td>
                     <td>
                       <span className={`status-pill ${p.status}`}>{p.status}</span>
+                      {p.flag_reason && (
+                        <div style={{ color: "var(--text-lo)", fontSize: 12, marginTop: 4 }}>
+                          {FLAG_LABEL[p.flag_reason] ?? p.flag_reason}
+                        </div>
+                      )}
                     </td>
                     <td>{formatDate(p.created_at)}</td>
                     <td>

@@ -39,14 +39,16 @@ export default function AdminTreasuryPage() {
     <div>
       <h1>Treasury</h1>
       <p className="sub">
-        The treasury Soroban contract, read live via its USDC balance. It is deployed and multi-sig-controlled but not yet in the
-        live checkout or x402 settlement path — nothing currently routes funds through it.
+        The treasury Soroban contract, read live via its USDC balance. It is deployed and multi-sig-controlled, and now
+        receives checkout&apos;s USDC-denominated fee revenue via a periodic sweep — not a direct call at checkout time (a
+        Soroban invocation must be the only operation in its transaction, so the fee leg is a plain classic payment into a
+        separate collection account first).
       </p>
 
-      {!status.wired_into_checkout && (
+      {status.wired_into_checkout && (
         <div className="status" style={{ marginBottom: 20 }}>
-          Not wired into checkout yet — this contract holds no operational funds today. Tracked as an open issue on
-          konfirm-backend.
+          USDC only — XLM- and EURC-denominated fee revenue is not swept into this contract, since it was initialized with
+          a single token and can&apos;t custody other assets.
         </div>
       )}
 
