@@ -9,8 +9,7 @@ export interface UseRequireAuthOptions<T> {
   meEndpoint: string;
   /** e.g. "/admin/login" or "/login" */
   loginPath: string;
-  /** Skip the check entirely — e.g. the login page itself, or a page that
-   * already has an identity from elsewhere (a `?merchant=` query param). */
+  /** Skip the check entirely — e.g. the login page itself. */
   skip?: boolean;
   /** Pull the caller's shape out of the /me response body, e.g.
    * `(body) => body.admin` or `(body) => body.merchant`. Defaults to the

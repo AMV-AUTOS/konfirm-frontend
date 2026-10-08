@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { API_BASE, apiPost } from "@/lib/api";
 import { useRequireAuth } from "@/lib/useAuth";
+import FeeSettlement from "@/components/fee-settlement";
 
 interface Payment {
   id: string;
@@ -12,7 +13,26 @@ interface Payment {
   asset_code: string;
   payer_address: string;
   link_description: string | null;
+  status: "paid" | "held" | "refunded" | "disputed";
+  flag_reason: string | null;
+  fee_status: "none" | "collected" | "owed" | "claimed" | "settled";
+  fee_owed_raw: string | null;
+  fee_asset_code: string | null;
 }
+
+// Plain-language reasons for an admin-review hold, shown to the merchant.
+// Anything unrecognised falls back to a neutral line rather than leaking an
+// internal code name.
+const HOLD_REASON_TEXT: Record<string, string> = {
+  amount_mismatch: "Amount didn't match the payment link — under review",
+  asset_mismatch: "Paid in a different asset than the link — under review",
+  issuer_mismatch: "Asset didn't match the expected token — under review",
+  no_session: "Not linked to a payment link — under review",
+  link_inactive: "Link was deactivated before this payment — under review",
+  no_fixed_amount: "Open-amount link — under review",
+  blocked_address: "Payer flagged by compliance — under review",
+};
+const HOLD_FALLBACK = "Held for review";
 
 interface Merchant {
   name: string;
@@ -23,40 +43,33 @@ function formatAmount(amount: number, code: string): string {
   return code === "USDC" ? `$${amount.toFixed(2)}` : `${amount.toFixed(2)} ${code}`;
 }
 
+// The dashboard is only ever the logged-in merchant's own data. There's no
+// address-in-the-URL view any more: the backend returns payments by session,
+// so an unauthenticated visitor sees nothing.
 function ActivityContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const queryMerchant = searchParams.get("merchant");
-
-  // A ?merchant=G... in the URL still works (handy for support or a
-  // one-off check, and needs no auth check of its own), but the normal
-  // path is the logged-in session — no address to remember or paste.
   const { resolved, data: merchant } = useRequireAuth<Merchant>({
     meEndpoint: "/auth/me",
     loginPath: "/login",
-    skip: Boolean(queryMerchant),
     select: (body) => (body as { merchant: Merchant }).merchant,
   });
-  // Derived, not its own state — it only ever mirrored one of these two
-  // sources, so there's nothing for a separate useState to get out of sync
-  // with. showNav mirrors the original's behavior exactly: false in the
-  // ?merchant= case, same as before (that path never set it true).
-  const merchantAddress = queryMerchant ?? merchant?.stellar_base_address ?? null;
+  const hasAddress = Boolean(merchant?.stellar_base_address);
   const showNav = Boolean(merchant);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [pending, setPending] = useState(false);
 
   const poll = useCallback(async () => {
-    if (!merchantAddress) return;
+    if (!hasAddress) return;
     const [paymentsRes, pendingRes] = await Promise.all([
-      fetch(`${API_BASE}/payments/by-merchant/${merchantAddress}`),
-      fetch(`${API_BASE}/payments/pending-by-merchant/${merchantAddress}`),
+      fetch(`${API_BASE}/payments/mine`),
+      fetch(`${API_BASE}/payments/mine/pending`),
     ]);
+    if (!paymentsRes.ok || !pendingRes.ok) return;
     const paymentsBody: Payment[] = await paymentsRes.json();
     const pendingBody = await pendingRes.json();
     setPayments(paymentsBody);
     setPending(Boolean(pendingBody.pending));
-  }, [merchantAddress]);
+  }, [hasAddress]);
 
   // The recursive scheduling lives here, in a plain local function, rather
   // than inside the `poll` callback referencing itself — a useCallback
@@ -83,10 +96,14 @@ function ActivityContent() {
     router.push("/login");
   }
 
+  // Held payments are listed but never counted as received until an admin
+  // clears them.
   const totals: Record<string, number> = {};
-  payments.forEach((p) => {
-    totals[p.asset_code] = (totals[p.asset_code] || 0) + Number(p.net_usdc);
-  });
+  payments
+    .filter((p) => p.status === "paid")
+    .forEach((p) => {
+      totals[p.asset_code] = (totals[p.asset_code] || 0) + Number(p.net_usdc);
+    });
   const hasBalances = Object.keys(totals).length > 0;
 
   return (
@@ -113,6 +130,7 @@ function ActivityContent() {
       <div className={`waiting-banner${pending ? " show" : ""}`}>
         <span className="spin" /> A payment is on its way — konfirming on-chain now…
       </div>
+      {merchant?.stellar_base_address && <FeeSettlement address={merchant.stellar_base_address} />}
       <div className="balance">
         {hasBalances ? (
           Object.entries(totals).map(([code, amount]) => (
@@ -127,8 +145,8 @@ function ActivityContent() {
         )}
       </div>
       <div>
-        {resolved && !merchantAddress && <div className="empty">No Stellar address on file yet.</div>}
-        {merchantAddress && payments.length === 0 && !pending && (
+        {resolved && !hasAddress && <div className="empty">No Stellar address on file yet.</div>}
+        {hasAddress && payments.length === 0 && !pending && (
           <div className="empty">No payments yet — this updates the instant one lands.</div>
         )}
         {payments.map((p) => (
@@ -140,9 +158,21 @@ function ActivityContent() {
                 <div className="from">
                   from {p.payer_address.slice(0, 4)}…{p.payer_address.slice(-4)}
                 </div>
+                {p.fee_status === "owed" && p.fee_owed_raw && (
+                  <div className="from">
+                    Fee owed {p.fee_owed_raw} {p.fee_asset_code}
+                  </div>
+                )}
+                {p.status === "held" && (
+                  <div className="from" role="status">
+                    {HOLD_REASON_TEXT[p.flag_reason ?? ""] ?? HOLD_FALLBACK}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="amount">{formatAmount(Number(p.net_usdc), p.asset_code)}</div>
+            <div className="amount">
+              {p.status === "held" ? "On hold" : formatAmount(Number(p.net_usdc), p.asset_code)}
+            </div>
           </div>
         ))}
       </div>
@@ -151,9 +181,5 @@ function ActivityContent() {
 }
 
 export default function ActivityPage() {
-  return (
-    <Suspense>
-      <ActivityContent />
-    </Suspense>
-  );
+  return <ActivityContent />;
 }

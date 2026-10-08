@@ -20,20 +20,12 @@ const MERCHANT_COOKIE = "konfirm_session";
 const MERCHANT_PROTECTED_PATHS = new Set(["/new", "/activity", "/cashout"]);
 
 export function proxy(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     if (!request.cookies.has(ADMIN_COOKIE)) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
-    return NextResponse.next();
-  }
-
-  // /activity's own ?merchant= escape hatch (a one-off/support view with
-  // no login, see activity/page.tsx's useRequireAuth `skip`) has to be
-  // mirrored here exactly, or this would block a path the page itself
-  // still serves without a session.
-  if (pathname === "/activity" && searchParams.has("merchant")) {
     return NextResponse.next();
   }
 
